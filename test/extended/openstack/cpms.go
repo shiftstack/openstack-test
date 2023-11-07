@@ -71,21 +71,7 @@ var _ = g.Describe("[sig-installer][Suite:openshift/openstack] ControlPlane Mach
 			VolumeType  string
 		}
 		var cpmsFDs []FailureDomain
-		var machinesFDs []FailureDomain
-
-		setOfFDs := func(fds []FailureDomain) []FailureDomain {
-			set := make(map[FailureDomain]bool)
-			var listFDs []FailureDomain
-
-			for _, v := range fds {
-				_, exists := set[v]
-				if !exists {
-					listFDs = append(listFDs, v)
-					set[v] = true
-				}
-			}
-			return listFDs
-		}
+		var machineFDs map[FailureDomain]struct{}
 
 		for _, network := range objects(providerSpec.Get("value.networks")) {
 			subnet := network.Get("subnets").String()
@@ -140,11 +126,13 @@ var _ = g.Describe("[sig-installer][Suite:openshift/openstack] ControlPlane Mach
 				machineSubnets[subnetName] = struct{}{}
 			}
 			if machineNovaAz != "" || machineCinderAz != "" || machineVolumeType != "" {
-				machinesFDs = append(machinesFDs, FailureDomain{
+				fd := FailureDomain{
 					ComputeZone: machineNovaAz,
 					VolumeZone:  machineCinderAz,
 					VolumeType:  machineVolumeType,
-				})
+				}
+				o.Expect(cpmsFDs).To(o.ContainElement(fd))
+				machineFDs[fd] = struct{}{}
 			}
 
 			for _, network := range objects(machine.Get("spec.providerSpec.value.networks")) {
@@ -160,7 +148,12 @@ var _ = g.Describe("[sig-installer][Suite:openshift/openstack] ControlPlane Mach
 			o.Expect(machineServerGroup).To(o.Equal(cpmsServerGroup), "server group	 mismatch on Machine %q", machineName)
 			o.Expect(machineNetworks).To(o.Equal(cpmsNetworks), "Network mismatch on Machine %q", machineName)
 		}
-		o.Expect(setOfFDs(machinesFDs)).To(o.ConsistOf(setOfFDs(cpmsFDs)))
+
+		if len(cpmsFDs) > 3 {
+			o.Expect(machineFDs).To(o.HaveLen(3))
+		} else {
+			o.Expect(machineFDs).To(o.HaveLen(len(cpmsFDs)))
+		}
 	})
 })
 
